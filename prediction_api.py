@@ -57,7 +57,13 @@ class SceneFlowPredictor:
             backward_flow=backward_flow,
         )
 
-    def predict_scene_flow(self, pc1: torch.Tensor, pc2: torch.Tensor) -> Tuple[torch.Tensor, List[float]]:
+        # Instantiate a fresh Neural_Prior model for this scene
+        self.net = Neural_Prior(dim_x=3,
+                                filter_size=self.options.hidden_units,
+                                act_fn=self.options.act_fn,
+                                layer_size=self.options.layer_size).to(self.device)
+
+    def fit(self, pc1: torch.Tensor, pc2: torch.Tensor) -> Tuple[torch.Tensor, List[float]]:
         """
         Predicts scene flow between two point clouds by optimizing a Neural_Prior model
         for the given scene.
@@ -86,20 +92,14 @@ class SceneFlowPredictor:
         if pc2_tensor.dim() == 2: # (N, 3) -> (1, N, 3)
             pc2_tensor = pc2_tensor.unsqueeze(0)
 
-        # Instantiate a fresh Neural_Prior model for this scene
-        net = Neural_Prior(dim_x=3,
-                           filter_size=self.options.hidden_units,
-                           act_fn=self.options.act_fn,
-                           layer_size=self.options.layer_size).to(self.device)
-
         # Setup optimizer
-        for param in net.parameters():
+        for param in self.net.parameters():
             param.requires_grad = True
 
-        params_to_optimize = [{'params': net.parameters(), 'lr': self.options.lr, 'weight_decay': self.options.weight_decay}]
+        params_to_optimize = [{'params': self.net.parameters(), 'lr': self.options.lr, 'weight_decay': self.options.weight_decay}]
         
         if self.options.backward_flow:
-            net_inv = copy.deepcopy(net)
+            net_inv = copy.deepcopy(self.net)
             # Ensure net_inv parameters are also marked for optimization
             params_to_optimize.append({'params': net_inv.parameters(), 'lr': self.options.lr, 'weight_decay': self.options.weight_decay})
             
@@ -121,7 +121,7 @@ class SceneFlowPredictor:
         for epoch in range(self.options.iters):
             optimizer.zero_grad()
 
-            flow_pred_1 = net(pc1_tensor)
+            flow_pred_1 = self.net(pc1_tensor)
             pc1_deformed = pc1_tensor + flow_pred_1
             # In optimization.py, normals are passed as None when calling my_chamfer_fn in solver.
             loss_chamfer_1, _ = my_chamfer_fn(pc2_tensor, pc1_deformed, None, None) 
@@ -152,10 +152,21 @@ class SceneFlowPredictor:
         # return the flow from the last state
         if best_flow_output is None:
             with torch.no_grad():
-                final_flow_pred = net(pc1_tensor)
+                final_flow_pred = self.net(pc1_tensor)
                 best_flow_output = (pc1_tensor + final_flow_pred - pc1_tensor).detach().squeeze(0)
 
         return best_flow_output, total_losses
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Predicts the scene flow for a given point cloud using the optimized Neural_Prior model.
+        Args:
+            x (torch.Tensor): Input point cloud, shape (N, 3) or (B, N, 3).
+        Returns:
+            torch.Tensor: Predicted scene flow vectors, shape (N, 3) or (B, N, 3).
+        """
+        return self.net(x.to(self.device))
+
 
 # Example usage (for testing purposes, not part of the library API itself)
 if __name__ == '__main__':

@@ -69,28 +69,22 @@ class SceneFlowPredictor:
         for the given scene.
 
         Args:
-            pc1 (torch.Tensor): First point cloud, shape (N, 3) or (B, N, 3).
-            pc2 (torch.Tensor): Second point cloud, shape (N, 3) or (B, N, 3).
+            pc1 (torch.Tensor): First point cloud, shape (N, 3).
+            pc2 (torch.Tensor): Second point cloud, shape (N, 3).
                                  Should be on the same device as the predictor or compatible.
 
         Returns:
-            torch.Tensor: Predicted scene flow vectors, shape (N, 3) or (B, N, 3).
+            torch.Tensor: Predicted scene flow vectors, shape (N, 3).
                           This is the flow that warps pc1 to best match pc2,
                           on the same device as the predictor.
         """
-        if pc1.shape != pc2.shape:
-            raise ValueError("Point clouds must have the same shape.")
-        if pc1.shape[-1] != 3:
-            raise ValueError("Point clouds must have 3 coordinates (x, y, z).")
-
-        # Ensure input tensors are on the correct device and have a batch dimension
+        # Ensure input tensors are on the correct device
         pc1_tensor = pc1.float().to(self.device)
         pc2_tensor = pc2.float().to(self.device)
 
-        if pc1_tensor.dim() == 2: # (N, 3) -> (1, N, 3)
-            pc1_tensor = pc1_tensor.unsqueeze(0)
-        if pc2_tensor.dim() == 2: # (N, 3) -> (1, N, 3)
-            pc2_tensor = pc2_tensor.unsqueeze(0)
+        # (N, 3) -> (1, N, 3)
+        pc1_tensor = pc1_tensor.unsqueeze(0)
+        pc2_tensor = pc2_tensor.unsqueeze(0)
 
         # Setup optimizer
         for param in self.net.parameters():
@@ -153,7 +147,7 @@ class SceneFlowPredictor:
         if best_flow_output is None:
             with torch.no_grad():
                 final_flow_pred = self.net(pc1_tensor)
-                best_flow_output = (pc1_tensor + final_flow_pred - pc1_tensor).detach().squeeze(0)
+                best_flow_output = (pc1_tensor + final_flow_pred - pc1_tensor).detach().squeeze(0) # Remove batch dimension
 
         return best_flow_output, total_losses
 
@@ -161,9 +155,9 @@ class SceneFlowPredictor:
         """
         Predicts the scene flow for a given point cloud using the optimized Neural_Prior model.
         Args:
-            x (torch.Tensor): Input point cloud, shape (N, 3) or (B, N, 3).
+            x (torch.Tensor): Input point cloud, shape (N, 3).
         Returns:
-            torch.Tensor: Predicted scene flow vectors, shape (N, 3) or (B, N, 3).
+            torch.Tensor: Predicted scene flow vectors, shape (N, 3)
         """
         return self.net(x.to(self.device))
 

@@ -22,7 +22,8 @@ class SceneFlowPredictor:
                  optimizer_type: str = 'adam',
                  weight_decay: float = 0, # Default from optimization.py
                  early_patience: int = 100,
-                 backward_flow: bool = True
+                 backward_flow: bool = True,
+                 min_delta: float = 0.0001,
                 ):
         """
         Initializes the SceneFlowPredictor for runtime optimization of Neural_Prior.
@@ -39,6 +40,7 @@ class SceneFlowPredictor:
             weight_decay (float): Weight decay for the optimizer.
             early_patience (int): Patience for early stopping during optimization.
             backward_flow (bool): Whether to include backward flow loss in the optimization.
+            min_delta (float): Minimum change in loss to qualify as an improvement for early stopping.
         """
         self.device = torch.device(device)
 
@@ -55,6 +57,7 @@ class SceneFlowPredictor:
             weight_decay=weight_decay,
             early_patience=early_patience,
             backward_flow=backward_flow,
+            min_delta=min_delta,
         )
 
         # Instantiate a fresh Neural_Prior model for this scene
@@ -104,7 +107,7 @@ class SceneFlowPredictor:
         else:
             raise ValueError(f"Unknown optimizer: {self.options.optimizer}")
 
-        early_stopping = EarlyStopping(patience=self.options.early_patience, min_delta=0.0001)
+        early_stopping = EarlyStopping(patience=self.options.early_patience, min_delta=self.options.min_delta)
 
         best_flow_output = None
         best_loss_val = float('inf')
